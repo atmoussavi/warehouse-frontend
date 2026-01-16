@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Warehouse Management System</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        .card-hover:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+        .sidebar-item:hover {
+            background-color: #f3f4f6;
+        }
+        .sidebar-item.active {
+            background-color: #3b82f6;
+            color: white;
+        }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-slide-in {
+            animation: slideIn 0.3s ease-out;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        const API_BASE_URL = 'https://warehouse-api-iuox.onrender.com'; // Update this!
+
+        const fetchData = async () => {
+            try {
+                const [products, orders, locations, warehouses, stats] = await Promise.all([
+                    fetch(`${API_BASE_URL}/products`).then(r => r.json()),
+                    fetch(`${API_BASE_URL}/orders`).then(r => r.json()),
+                    fetch(`${API_BASE_URL}/locations`).then(r => r.json()),
+                    fetch(`${API_BASE_URL}/warehouses`).then(r => r.json()),
+                    fetch(`${API_BASE_URL}/dashboard/stats`).then(r => r.json())
+                ]);
+                
+                return { products, orders, locations, warehouses, stats };
+            } catch (error) {
+                console.error('Failed to fetch data:', error);
+                return generateMockData(); // Fallback to mock data
+            }
+        };
+
+        // Mock data generator
+        const generateMockData = () => {
+            return {
+                warehouses: [
+                    { id: 1, code: 'WH001', name: 'Main Distribution Center', city: 'Chicago', state: 'IL', status: 'active' },
+                    { id: 2, code: 'WH002', name: 'East Coast Facility', city: 'Newark', state: 'NJ', status: 'active' }
+                ],
+                products: [
+                    { id: 1, sku: 'PROD-001', name: 'Widget A', category: 'Widgets', quantity: 450, reorderLevel: 100, price: 29.99, status: 'in-stock' },
+                    { id: 2, sku: 'PROD-002', name: 'Widget B', category: 'Widgets', quantity: 85, reorderLevel: 50, price: 49.99, status: 'low-stock' },
+                    { id: 3, sku: 'PROD-003', name: 'Gadget X', category: 'Electronics', quantity: 15, reorderLevel: 25, price: 199.99, status: 'critical' },
+                    { id: 4, sku: 'PROD-004', name: 'Tool Set Pro', category: 'Tools', quantity: 200, reorderLevel: 50, price: 89.99, status: 'in-stock' },
+                    { id: 5, sku: 'PROD-005', name: 'Smart Device', category: 'Electronics', quantity: 120, reorderLevel: 30, price: 299.99, status: 'in-stock' }
+                ],
+                orders: [
+                    { id: 1, orderNumber: 'ORD-2026-001', type: 'outbound', customer: 'Retail Giants LLC', date: '2026-01-15', status: 'processing', items: 5, total: 1249.95 },
+                    { id: 2, orderNumber: 'ORD-2026-002', type: 'inbound', supplier: 'Acme Manufacturing', date: '2026-01-16', status: 'pending', items: 10, total: 5000.00 },
+                    { id: 3, orderNumber: 'ORD-2026-003', type: 'outbound', customer: 'Online Marketplace Co', date: '2026-01-14', status: 'shipped', items: 3, total: 599.97 },
+                    { id: 4, orderNumber: 'ORD-2026-004', type: 'outbound', customer: 'Tech Distributors', date: '2026-01-16', status: 'picked', items: 8, total: 2399.92 }
+                ],
+                locations: [
+                    { id: 1, code: 'A01-R01-S01-B01', zone: 'Storage Zone A', occupied: true, product: 'Widget A', quantity: 250 },
+                    { id: 2, code: 'A01-R01-S01-B02', zone: 'Storage Zone A', occupied: true, product: 'Widget B', quantity: 85 },
+                    { id: 3, code: 'A01-R01-S02-B01', zone: 'Storage Zone A', occupied: false, product: null, quantity: 0 },
+                    { id: 4, code: 'B01-FL-001', zone: 'Storage Zone B', occupied: true, product: 'Tool Set Pro', quantity: 200 }
+                ],
+                stats: {
+                    totalProducts: 5,
+                    totalOrders: 28,
+                    lowStockItems: 2,
+                    totalValue: 145750.50,
+                    ordersToday: 4,
+                    pendingShipments: 3,
+                    warehouseUtilization: 68
+                }
+            };
+        };
+
+        // Dashboard Component
+        const Dashboard = () => {
+            const data = generateMockData();
+            
+            return (
+                <div className="animate-slide-in">
+                    <h1 className="text-3xl font-bold text-gray-800 mb-6">Dashboard Overview</h1>
+                    
+                    {/* Stats Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                        <StatCard 
+                            icon="fa-boxes" 
+                            title="Total Products" 
+                            value={data.stats.totalProducts.toLocaleString()} 
+                            color="blue"
+                            trend="+12%"
+                        />
+                        <StatCard 
+                            icon="fa-shopping-cart" 
+                            title="Total Orders" 
+                            value={data.stats.totalOrders} 
+                            color="green"
+                            trend="+8%"
+                        />
+                        <StatCard 
+                            icon="fa-exclamation-triangle" 
+                            title="Low Stock Items" 
+                            value={data.stats.lowStockItems} 
+                            color="orange"
+                            trend="-2"
+                        />
+                        <StatCard 
+                            icon="fa-dollar-sign" 
+                            title="Total Inventory Value" 
+                            value={`$${(data.stats.totalValue / 1000).toFixed(1)}K`} 
+                            color="purple"
+                            trend="+5.2%"
+                        />
+                    </div>
+
+                    {/* Recent Orders & Low Stock Alerts */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                        <div className="bg-white rounded-lg shadow-md p-6">
+                            <h2 className="text-xl font-semibold mb-4 flex items-center">
+                                <i className="fas fa-clock text-blue-600 mr-2"></i>
+                                Recent Orders
+                            </h2>
+                            <div className="space-y-3">
+                                {data.orders.slice(0, 4).map(order => (
+                                    <div key={order.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition">
+                                        <div>
+                                            <p className="font-medium text-gray-800">{order.orderNumber}</p>
+                                            <p className="text-sm text-gray-500">{order.customer || order.supplier}</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="font-semibold text-gray-800">${order.total.toFixed(2)}</p>
+                                            <StatusBadge status={order.status} />
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="bg-white rounded-lg shadow-md p-6">
+                            <h2 className="text-xl font-semibold mb-4 flex items-center">
+                                <i className="fas fa-exclamation-circle text-orange-600 mr-2"></i>
+                                Low Stock Alerts
+                            </h2>
+                            <div className="space-y-3">
+                                {data.products.filter(p => p.status !== 'in-stock').map(product => (
+                                    <div key={product.id} className="flex items-center justify-between p-3 bg-orange-50 rounded-lg border-l-4 border-orange-500">
+                                        <div>
+                                            <p className="font-medium text-gray-800">{product.name}</p>
+                                            <p className="text-sm text-gray-500">SKU: {product.sku}</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-lg font-bold text-orange-600">{product.quantity}</p>
+                                            <p className="text-xs text-gray-500">Reorder: {product.reorderLevel}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Warehouse Activity */}
+                    <div className="bg-white rounded-lg shadow-md p-6">
+                        <h2 className="text-xl font-semibold mb-4 flex items-center">
+                            <i className="fas fa-warehouse text-indigo-600 mr-2"></i>
+                            Warehouse Activity
+                        </h2>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <ActivityCard title="Orders Today" value={data.stats.ordersToday} icon="fa-calendar-day" />
+                            <ActivityCard title="Pending Shipments" value={data.stats.pendingShipments} icon="fa-truck" />
+                            <ActivityCard title="Utilization" value={`${data.stats.warehouseUtilization}%`} icon="fa-chart-bar" />
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // Products Component
+        const Products = () => {
+            const data = generateMockData();
+            const [searchTerm, setSearchTerm] = useState('');
+            const [filterStatus, setFilterStatus] = useState('all');
+            
+            const filteredProducts = data.products.filter(product => {
+                const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                                    product.sku.toLowerCase().includes(searchTerm.toLowerCase());
+                const matchesFilter = filterStatus === 'all' || product.status === filterStatus;
+                return matchesSearch && matchesFilter;
+            });
+
+            return (
+                <div className="animate-slide-in">
+                    <div className="flex justify-between items-center mb-6">
+                        <h1 className="text-3xl font-bold text-gray-800">Products</h1>
+                        <button className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition flex items-center">
+                            <i className="fas fa-plus mr-2"></i>
+                            Add Product
+                        </button>
+                    </div>
+
+                    {/* Filters */}
+                    <div className="bg-white rounded-lg shadow-md p-4 mb-6 flex flex-wrap gap-4">
+                        <div className="flex-1 min-w-[200px]">
+                            <input
+                                type="text"
+                                placeholder="Search products..."
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
+                        <select 
+                            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            value={filterStatus}
+                            onChange={(e) => setFilterStatus(e.target.value)}
+                        >
+                            <option value="all">All Status</option>
+                            <option value="in-stock">In Stock</option>
+                            <option value="low-stock">Low Stock</option>
+                            <option value="critical">Critical</option>
+                        </select>
+                    </div>
+
+                    {/* Products Table */}
+                    <div className="bg-white rounded-lg shadow-md overflow-hidden">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SKU</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product Name</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                                {filteredProducts.map(product => (
+                                    <tr key={product.id} className="hover:bg-gray-50 transition">
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{product.sku}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{product.name}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.category}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                            <span className={`font-semibold ${product.status === 'critical' ? 'text-red-600' : product.status === 'low-stock' ? 'text-orange-600' : 'text-green-600'}`}>
+                                                {product.quantity}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${product.price}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <StatusBadge status={product.status} />
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                            <button className="text-blue-600 hover:text-blue-900 mr-3" title="Edit">
+                                                <i className="fas fa-edit"></i>
+                                            </button>
+                                            <button className="text-green-600 hover:text-green-900 mr-3" title="View Details">
+                                                <i className="fas fa-eye"></i>
+                                            </button>
+                                            <button className="text-red-600 hover:text-red-900" title="Delete">
+                                                <i className="fas fa-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            );
+        };
+
+        // Orders Component
+        const Orders = () => {
+            const data = generateMockData();
+            const [filterType, setFilterType] = useState('all');
+            
+            const filteredOrders = data.orders.filter(order => 
+                filterType === 'all' || order.type === filterType
+            );
+
+            return (
+                <div className="animate-slide-in">
+                    <div className="flex justify-between items-center mb-6">
+                        <h1 className="text-3xl font-bold text-gray-800">Orders</h1>
+                        <button className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition flex items-center">
+                            <i className="fas fa-plus mr-2"></i>
+                            Create Order
+                        </button>
+                    </div>
+
+                    {/* Order Type Filter */}
+                    <div className="bg-white rounded-lg shadow-md p-4 mb-6">
+                        <div className="flex gap-4">
+                            <button 
+                                onClick={() => setFilterType('all')}
+                                className={`px-4 py-2 rounded-lg transition ${filterType === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                            >
+                                All Orders
+                            </button>
+                            <button 
+                                onClick={() => setFilterType('outbound')}
+                                className={`px-4 py-2 rounded-lg transition ${filterType === 'outbound' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                            >
+                                Outbound
+                            </button>
+                            <button 
+                                onClick={() => setFilterType('inbound')}
+                                className={`px-4 py-2 rounded-lg transition ${filterType === 'inbound' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                            >
+                                Inbound
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Orders Grid */}
+                    <div className="grid grid-cols-1 gap-4">
+                        {filteredOrders.map(order => (
+                            <div key={order.id} className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition card-hover">
+                                <div className="flex justify-between items-start mb-4">
+                                    <div>
+                                        <h3 className="text-xl font-semibold text-gray-800">{order.orderNumber}</h3>
+                                        <p className="text-sm text-gray-500 mt-1">
+                                            {order.customer || order.supplier} • {order.date}
+                                        </p>
+                                    </div>
+                                    <div className="flex flex-col items-end gap-2">
+                                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                            order.type === 'outbound' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'
+                                        }`}>
+                                            {order.type.toUpperCase()}
+                                        </span>
+                                        <StatusBadge status={order.status} />
+                                    </div>
+                                </div>
+                                <div className="flex justify-between items-center pt-4 border-t border-gray-200">
+                                    <div className="flex gap-6 text-sm text-gray-600">
+                                        <span><i className="fas fa-box mr-2"></i>{order.items} items</span>
+                                        <span className="font-semibold text-gray-800">${order.total.toFixed(2)}</span>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button className="text-blue-600 hover:text-blue-800 px-3 py-1 border border-blue-600 rounded hover:bg-blue-50 transition">
+                                            View Details
+                                        </button>
+                                        <button className="text-gray-600 hover:text-gray-800 px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 transition">
+                                            <i className="fas fa-print"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+
+        // Locations Component
+        const Locations = () => {
+            const data = generateMockData();
+            
+            return (
+                <div className="animate-slide-in">
+                    <div className="flex justify-between items-center mb-6">
+                        <h1 className="text-3xl font-bold text-gray-800">Warehouse Locations</h1>
+                        <button className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition flex items-center">
+                            <i className="fas fa-plus mr-2"></i>
+                            Add Location
+                        </button>
+                    </div>
+
+                    {/* Warehouse Selection */}
+                    <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+                        <h2 className="text-lg font-semibold mb-4">Select Warehouse</h2>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {data.warehouses.map(warehouse => (
+                                <div key={warehouse.id} className="border-2 border-blue-600 rounded-lg p-4 cursor-pointer hover:bg-blue-50 transition">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <h3 className="font-semibold text-lg text-gray-800">{warehouse.name}</h3>
+                                            <p className="text-sm text-gray-500">{warehouse.code} • {warehouse.city}, {warehouse.state}</p>
+                                        </div>
+                                        <i className="fas fa-warehouse text-3xl text-blue-600"></i>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Locations Table */}
+                    <div className="bg-white rounded-lg shadow-md overflow-hidden">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location Code</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Zone</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                                {data.locations.map(location => (
+                                    <tr key={location.id} className="hover:bg-gray-50 transition">
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{location.code}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{location.zone}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                                location.occupied ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                                            }`}>
+                                                {location.occupied ? 'Occupied' : 'Available'}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{location.product || '-'}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">{location.quantity || '-'}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                            <button className="text-blue-600 hover:text-blue-900 mr-3" title="View">
+                                                <i className="fas fa-eye"></i>
+                                            </button>
+                                            <button className="text-green-600 hover:text-green-900" title="Move Inventory">
+                                                <i className="fas fa-exchange-alt"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            );
+        };
+
+        // Utility Components
+        const StatCard = ({ icon, title, value, color, trend }) => {
+            const colorClasses = {
+                blue: 'bg-blue-500',
+                green: 'bg-green-500',
+                orange: 'bg-orange-500',
+                purple: 'bg-purple-500'
+            };
+
+            return (
+                <div className="bg-white rounded-lg shadow-md p-6 card-hover transition">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-sm text-gray-600 mb-1">{title}</p>
+                            <p className="text-3xl font-bold text-gray-800">{value}</p>
+                            {trend && (
+                                <p className="text-sm text-green-600 mt-2">
+                                    <i className="fas fa-arrow-up mr-1"></i>
+                                    {trend}
+                                </p>
+                            )}
+                        </div>
+                        <div className={`${colorClasses[color]} rounded-full p-4`}>
+                            <i className={`fas ${icon} text-white text-2xl`}></i>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const ActivityCard = ({ title, value, icon }) => (
+            <div className="bg-gray-50 rounded-lg p-4 flex items-center justify-between">
+                <div>
+                    <p className="text-sm text-gray-600">{title}</p>
+                    <p className="text-2xl font-bold text-gray-800 mt-1">{value}</p>
+                </div>
+                <i className={`fas ${icon} text-indigo-600 text-2xl`}></i>
+            </div>
+        );
+
+        const StatusBadge = ({ status }) => {
+            const statusConfig = {
+                'pending': { bg: 'bg-yellow-100', text: 'text-yellow-800' },
+                'processing': { bg: 'bg-blue-100', text: 'text-blue-800' },
+                'picked': { bg: 'bg-purple-100', text: 'text-purple-800' },
+                'packed': { bg: 'bg-indigo-100', text: 'text-indigo-800' },
+                'shipped': { bg: 'bg-green-100', text: 'text-green-800' },
+                'delivered': { bg: 'bg-emerald-100', text: 'text-emerald-800' },
+                'cancelled': { bg: 'bg-red-100', text: 'text-red-800' },
+                'in-stock': { bg: 'bg-green-100', text: 'text-green-800' },
+                'low-stock': { bg: 'bg-orange-100', text: 'text-orange-800' },
+                'critical': { bg: 'bg-red-100', text: 'text-red-800' }
+            };
+
+            const config = statusConfig[status] || { bg: 'bg-gray-100', text: 'text-gray-800' };
+
+            return (
+                <span className={`px-2 py-1 rounded-full text-xs font-semibold ${config.bg} ${config.text}`}>
+                    {status.replace('-', ' ').toUpperCase()}
+                </span>
+            );
+        };
+
+        // Main App Component
+        const App = () => {
+            const [currentPage, setCurrentPage] = useState('dashboard');
+
+            const renderPage = () => {
+                switch(currentPage) {
+                    case 'dashboard': return <Dashboard />;
+                    case 'products': return <Products />;
+                    case 'orders': return <Orders />;
+                    case 'locations': return <Locations />;
+                    default: return <Dashboard />;
+                }
+            };
+
+            return (
+                <div className="flex h-screen bg-gray-50">
+                    {/* Sidebar */}
+                    <div className="w-64 bg-white shadow-lg">
+                        <div className="p-6 border-b border-gray-200">
+                            <h1 className="text-2xl font-bold text-blue-600 flex items-center">
+                                <i className="fas fa-warehouse mr-2"></i>
+                                WMS
+                            </h1>
+                            <p className="text-sm text-gray-500 mt-1">Warehouse Management</p>
+                        </div>
+                        <nav className="p-4">
+                            <SidebarItem 
+                                icon="fa-dashboard" 
+                                text="Dashboard" 
+                                active={currentPage === 'dashboard'}
+                                onClick={() => setCurrentPage('dashboard')}
+                            />
+                            <SidebarItem 
+                                icon="fa-boxes" 
+                                text="Products" 
+                                active={currentPage === 'products'}
+                                onClick={() => setCurrentPage('products')}
+                            />
+                            <SidebarItem 
+                                icon="fa-shopping-cart" 
+                                text="Orders" 
+                                active={currentPage === 'orders'}
+                                onClick={() => setCurrentPage('orders')}
+                            />
+                            <SidebarItem 
+                                icon="fa-map-marker-alt" 
+                                text="Locations" 
+                                active={currentPage === 'locations'}
+                                onClick={() => setCurrentPage('locations')}
+                            />
+                            <SidebarItem icon="fa-users" text="Customers" />
+                            <SidebarItem icon="fa-truck" text="Suppliers" />
+                            <SidebarItem icon="fa-chart-line" text="Reports" />
+                            <SidebarItem icon="fa-cog" text="Settings" />
+                        </nav>
+                    </div>
+
+                    {/* Main Content */}
+                    <div className="flex-1 overflow-auto">
+                        <div className="bg-white shadow-sm border-b border-gray-200 p-4">
+                            <div className="flex justify-between items-center">
+                                <div className="flex items-center">
+                                    <i className="fas fa-search text-gray-400 mr-2"></i>
+                                    <input 
+                                        type="text" 
+                                        placeholder="Search..." 
+                                        className="border-none focus:outline-none text-gray-600"
+                                    />
+                                </div>
+                                <div className="flex items-center gap-4">
+                                    <button className="text-gray-600 hover:text-gray-800 relative">
+                                        <i className="fas fa-bell text-xl"></i>
+                                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">3</span>
+                                    </button>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white font-semibold">
+                                            JD
+                                        </div>
+                                        <span className="text-sm font-medium text-gray-700">John Doe</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="p-8">
+                            {renderPage()}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const SidebarItem = ({ icon, text, active, onClick }) => (
+            <button 
+                onClick={onClick}
+                className={`sidebar-item w-full flex items-center px-4 py-3 mb-2 rounded-lg transition ${active ? 'active' : ''}`}
+            >
+                <i className={`fas ${icon} mr-3 w-5`}></i>
+                <span className="font-medium">{text}</span>
+            </button>
+        );
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
