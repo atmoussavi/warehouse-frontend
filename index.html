@@ -452,6 +452,219 @@
             );
         };
 
+        // Floor Move Component - multi-step UI for warehouse floor users
+        const FloorMove = () => {
+            const [workerId, setWorkerId] = useState(localStorage.getItem('workerId') || '');
+            const [pin, setPin] = useState('');
+            const [step, setStep] = useState('signin'); // signin, start, item, qty, dest, summary
+
+            const [itemId, setItemId] = useState('');
+            const [quantity, setQuantity] = useState('');
+            const [destination, setDestination] = useState('');
+            const [transactions, setTransactions] = useState([]);
+            const [statusMsg, setStatusMsg] = useState('');
+
+            useEffect(() => {
+                const saved = localStorage.getItem('floor_signed_in');
+                if (saved === '1' && workerId) setStep('start');
+            }, []);
+
+            const signIn = (e) => {
+                e && e.preventDefault();
+                if (!workerId) return setStatusMsg('Enter worker ID');
+                localStorage.setItem('workerId', workerId);
+                localStorage.setItem('floor_signed_in', '1');
+                setStatusMsg('');
+                setStep('start');
+            };
+
+            const signOut = () => {
+                localStorage.removeItem('floor_signed_in');
+                setWorkerId('');
+                setPin('');
+                setItemId(''); setQuantity(''); setDestination('');
+                setStep('signin');
+            };
+
+            const startMove = () => {
+                setItemId(''); setQuantity(''); setDestination(''); setStatusMsg('');
+                setStep('item');
+                setTimeout(() => document.getElementById('floor-item-id')?.focus(), 100);
+            };
+
+            const onEnterItem = (e) => {
+                e && e.preventDefault();
+                if (!itemId) return setStatusMsg('Enter or scan Item ID');
+                setStatusMsg('');
+                setStep('qty');
+                setTimeout(() => document.getElementById('floor-quantity')?.focus(), 50);
+            };
+
+            const onEnterQty = (e) => {
+                e && e.preventDefault();
+                if (!quantity || Number(quantity) <= 0) return setStatusMsg('Enter valid quantity');
+                setStatusMsg('');
+                setStep('dest');
+                setTimeout(() => document.getElementById('floor-destination')?.focus(), 50);
+            };
+
+            const submitMove = async () => {
+                if (!itemId) return setStatusMsg('Missing item');
+                if (!quantity || Number(quantity) <= 0) return setStatusMsg('Invalid quantity');
+                if (!destination) return setStatusMsg('Missing destination');
+
+                const payload = {
+                    workerId,
+                    itemId: itemId.trim(),
+                    quantity: Number(quantity),
+                    destination: destination.trim(),
+                    timestamp: new Date().toISOString()
+                };
+
+                try {
+                        const res = await fetch(`${API_BASE_URL}/api/move`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    if (!res.ok) throw new Error('Network');
+                    const data = await res.json();
+                    setTransactions(t => [ { ...payload, id: data.id || Date.now(), status: 'ok' }, ...t ]);
+                    setStatusMsg('Move sent');
+                } catch (err) {
+                    setTransactions(t => [ { ...payload, id: Date.now(), status: 'offline' }, ...t ]);
+                    setStatusMsg('Recorded locally (offline)');
+                }
+
+                setStep('summary');
+            };
+
+            const resetForNext = () => {
+                setItemId(''); setQuantity(''); setDestination(''); setStatusMsg('');
+                setStep('start');
+            };
+
+            return (
+                <div className="animate-slide-in max-w-2xl">
+                    {step === 'signin' && (
+                        <div className="bg-white p-6 rounded-lg shadow-md">
+                            <h2 className="text-2xl font-semibold mb-4">Floor Sign In</h2>
+                            <form onSubmit={signIn} className="space-y-4">
+                                <div>
+                                    <label className="text-sm text-gray-600">Worker ID</label>
+                                    <input value={workerId} onChange={e => setWorkerId(e.target.value)} className="w-full mt-1 px-3 py-2 border rounded" placeholder="Scan or type your ID" />
+                                </div>
+                                <div>
+                                    <label className="text-sm text-gray-600">PIN (optional)</label>
+                                    <input value={pin} onChange={e => setPin(e.target.value)} type="password" className="w-full mt-1 px-3 py-2 border rounded" placeholder="PIN" />
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <button className="bg-blue-600 text-white px-4 py-2 rounded" type="submit">Sign In</button>
+                                    <div className="text-sm text-red-600">{statusMsg}</div>
+                                </div>
+                            </form>
+                        </div>
+                    )}
+
+                    {step === 'start' && (
+                        <div className="bg-white p-6 rounded-lg shadow-md">
+                            <div className="flex items-center justify-between mb-4">
+                                <h2 className="text-2xl font-semibold">Ready to Move</h2>
+                                <div className="flex items-center gap-2">
+                                    <div className="text-sm text-gray-600">{workerId}</div>
+                                    <button onClick={signOut} className="text-sm text-red-600">Sign out</button>
+                                </div>
+                            </div>
+                            <p className="text-sm text-gray-600 mb-4">Press Start to begin a move transaction.</p>
+                            <div className="flex gap-3">
+                                <button onClick={startMove} className="bg-green-600 text-white px-4 py-2 rounded">Start Move</button>
+                                <button onClick={() => setStep('summary')} className="px-4 py-2 border rounded">Recent Moves</button>
+                            </div>
+                        </div>
+                    )}
+
+                    {step === 'item' && (
+                        <div className="bg-white p-6 rounded-lg shadow-md">
+                            <h2 className="text-2xl font-semibold mb-4">Scan / Enter Item ID</h2>
+                            <form onSubmit={onEnterItem}>
+                                <input id="floor-item-id" value={itemId} onChange={e => setItemId(e.target.value)} className="w-full mt-1 px-3 py-2 border rounded" placeholder="Scan or enter item ID and press Enter" />
+                                <div className="flex items-center justify-between mt-4">
+                                    <div className="text-sm text-red-600">{statusMsg}</div>
+                                    <div className="flex gap-2">
+                                        <button type="button" onClick={() => setStep('start')} className="px-4 py-2 border rounded">Cancel</button>
+                                        <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded">Next</button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    )}
+
+                    {step === 'qty' && (
+                        <div className="bg-white p-6 rounded-lg shadow-md">
+                            <h2 className="text-2xl font-semibold mb-4">Enter Quantity</h2>
+                            <form onSubmit={onEnterQty}>
+                                <input id="floor-quantity" value={quantity} onChange={e => setQuantity(e.target.value)} inputMode="numeric" className="w-full mt-1 px-3 py-2 border rounded" placeholder="Enter quantity and press Enter" />
+                                <div className="flex items-center justify-between mt-4">
+                                    <div className="text-sm text-red-600">{statusMsg}</div>
+                                    <div className="flex gap-2">
+                                        <button type="button" onClick={() => setStep('item')} className="px-4 py-2 border rounded">Back</button>
+                                        <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded">Next</button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    )}
+
+                    {step === 'dest' && (
+                        <div className="bg-white p-6 rounded-lg shadow-md">
+                            <h2 className="text-2xl font-semibold mb-4">Scan Destination Location</h2>
+                            <form onSubmit={(e) => { e.preventDefault(); submitMove(); }}>
+                                <input id="floor-destination" value={destination} onChange={e => setDestination(e.target.value)} className="w-full mt-1 px-3 py-2 border rounded" placeholder="Scan destination and press Enter" />
+                                <div className="flex items-center justify-between mt-4">
+                                    <div className="text-sm text-red-600">{statusMsg}</div>
+                                    <div className="flex gap-2">
+                                        <button type="button" onClick={() => setStep('qty')} className="px-4 py-2 border rounded">Back</button>
+                                        <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded">Enter</button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    )}
+
+                    {step === 'summary' && (
+                        <div className="bg-white p-6 rounded-lg shadow-md">
+                            <div className="flex items-center justify-between mb-4">
+                                <h2 className="text-2xl font-semibold">Move Complete</h2>
+                                <div className="flex items-center gap-2">
+                                    <div className="text-sm text-gray-600">{workerId}</div>
+                                    <button onClick={signOut} className="text-sm text-red-600">Sign out</button>
+                                </div>
+                            </div>
+                            <p className="text-sm text-gray-600 mb-4">{statusMsg || 'Last moves shown below.'}</p>
+                            <div>
+                                <h3 className="text-lg font-semibold">Recent Moves</h3>
+                                <ul className="mt-2 space-y-2 max-h-48 overflow-auto">
+                                    {transactions.map(tx => (
+                                        <li key={tx.id} className="p-2 border rounded flex justify-between items-center">
+                                            <div className="text-sm">
+                                                <div><strong>{tx.itemId}</strong> × {tx.quantity}</div>
+                                                <div className="text-xs text-gray-500">to {tx.destination} • {new Date(tx.timestamp).toLocaleTimeString()}</div>
+                                            </div>
+                                            <div className={`text-xs font-semibold ${tx.status === 'ok' ? 'text-green-600' : 'text-orange-600'}`}>{tx.status === 'ok' ? 'Sent' : 'Offline'}</div>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                            <div className="flex gap-3 mt-4">
+                                <button onClick={resetForNext} className="bg-green-600 text-white px-4 py-2 rounded">New Move</button>
+                                <button onClick={() => setStep('start')} className="px-4 py-2 border rounded">Done</button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
         // Utility Components
         const StatCard = ({ icon, title, value, color, trend }) => {
             const colorClasses = {
@@ -525,6 +738,7 @@
                     case 'products': return <Products />;
                     case 'orders': return <Orders />;
                     case 'locations': return <Locations />;
+                    case 'floor': return <FloorMove />;
                     default: return <Dashboard />;
                 }
             };
@@ -564,6 +778,12 @@
                                 text="Locations" 
                                 active={currentPage === 'locations'}
                                 onClick={() => setCurrentPage('locations')}
+                            />
+                            <SidebarItem 
+                                icon="fa-hand-holding" 
+                                text="Floor" 
+                                active={currentPage === 'floor'}
+                                onClick={() => setCurrentPage('floor')}
                             />
                             <SidebarItem icon="fa-users" text="Customers" />
                             <SidebarItem icon="fa-truck" text="Suppliers" />
